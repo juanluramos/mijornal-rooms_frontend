@@ -133,7 +133,7 @@ window.resources = {
     endpoint: '/api/owner-expense',
     roles: ['admin', 'propietario'],
     idKey: 'id_gasto_propietario',
-    columns: ['id_gasto_propietario', 'gasto_de', 'nombre_vivienda', 'concepto', 'importe', 'fecha', 'tipo', 'estado', 'pagado_por'],
+    columns: ['gasto_de', 'nombre_vivienda', 'concepto', 'importe', 'fecha', 'tipo', 'estado', 'pagado_por'],
     fields: [
       ['id_propietario', 'Propietario', 'number', true],
       ['id_vivienda', 'Vivienda', 'number', false],

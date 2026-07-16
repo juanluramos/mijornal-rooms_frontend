@@ -1552,6 +1552,83 @@ textarea {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.expense-create-main-grid {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.expense-create-main-grid > label,
+.expense-create-main-grid .billing-period-field {
+  min-width: 0;
+}
+
+.expense-create-source-field {
+  grid-column: 1 / 3;
+}
+
+.expense-create-house-field,
+.expense-create-tenant-field {
+  grid-column: 3 / 5;
+}
+
+.expense-create-concept-field {
+  grid-column: 5 / 7;
+}
+
+.expense-create-amount-field {
+  grid-column: 7 / 8;
+}
+
+.expense-create-main-grid .billing-period-field {
+  grid-column: 8 / 11;
+}
+
+.expense-create-status-field {
+  grid-column: 11 / 13;
+}
+
+.expense-create-paid-by-field {
+  grid-column: 13 / 15;
+}
+
+.expense-create-custom-concept-field {
+  grid-column: 7 / 9;
+}
+
+.expense-create-main-grid .expense-description-field {
+  grid-column: 1 / 7;
+}
+
+.expense-create-main-grid textarea {
+  min-height: 82px;
+}
+
+.expense-create-main-grid .billing-period-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.expense-create-main-grid .billing-period-trigger {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.expense-create-main-grid .billing-calendar {
+  width: 238px;
+  max-width: none;
+}
+
+.expense-create-main-grid .billing-calendar-day,
+.expense-create-main-grid .billing-calendar-empty {
+  min-width: 24px;
+}
+
 .resource-form.room-edit-form {
   position: relative;
   width: 60%;
@@ -2624,6 +2701,15 @@ tbody tr.cancelled-expense-row .row-actions * {
 
   .expense-form-columns {
     grid-template-columns: 1fr;
+  }
+
+  .expense-create-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .expense-create-main-grid > label,
+  .expense-create-main-grid .billing-period-field {
+    grid-column: auto;
   }
 
   .form-header {

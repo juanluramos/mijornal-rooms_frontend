@@ -4767,6 +4767,30 @@ function formatDisplayValue(key, value) {
   return value;
 }
 
+function formatTableValue(resource, row, column) {
+  if (resource === resources.ownerExpenses && column === 'gasto_de') {
+    const target = String(row.gasto_de_value || row.gasto_de || '').toLowerCase();
+    if (target === 'inquilino') {
+      return [row.nombre_inquilino || row.nombre, row.apellido1_inquilino || row.apellido1]
+        .filter(Boolean)
+        .join(' ')
+        || (row.id_inquilino ? `Inquilino #${row.id_inquilino}` : row.gasto_de)
+        || '';
+    }
+    if (target === 'vivienda') return row.nombre_vivienda || row.gasto_de || '';
+    if (target === 'propietario') return 'Propietario';
+  }
+  if (resource === resources.ownerExpenses && column === 'fecha') {
+    const start = formatDateDisplay(row.fecha_inicio || row.fecha);
+    const end = formatDateDisplay(row.fecha_fin);
+    if (start && end && start !== end) return `${start} - ${end}`;
+    return start || end || '';
+  }
+  return isPaymentResource(resource)
+    ? formatPaymentListValue(column, getValue(row, column))
+    : formatDisplayValue(column, getValue(row, column));
+}
+
 function formatPaymentListValue(key, value) {
   if (key === 'estado_pago') {
     const status = String(value || '').toLowerCase();
@@ -6361,69 +6385,56 @@ function renderExpenseCreateForm() {
   )).join('');
 
   resourceForm.innerHTML = `<h3>Crear gasto</h3>
-    <div class="expense-form-columns">
-      <section class="tenant-create-section">
-        <h4>Destino</h4>
-        <div class="tenant-create-grid expense-create-grid-four">
-          <label>Gasto de
-            <select name="gasto_de" required>
-              <option value="">Selecciona</option>
-              <option value="vivienda">Vivienda</option>
-              <option value="inquilino">Inquilino</option>
-              <option value="propietario">Propietario</option>
-            </select>
-          </label>
-          <label data-expense-house-field>Vivienda
-            <select name="id_vivienda" required>
-              <option value="">Selecciona vivienda</option>
-              ${houseOptions}
-            </select>
-          </label>
-          <label class="hidden" data-expense-tenant-field>Inquilino
-            <select name="id_inquilino">
-              <option value="">Selecciona inquilino</option>
-              ${tenantOptions}
-            </select>
-          </label>
-        </div>
-      </section>
-      <section class="tenant-create-section">
-        <h4>Detalle</h4>
-        <div class="tenant-create-grid expense-create-grid-four">
-          <label>Concepto
-            <select name="concepto" required data-expense-concept-select>
-              <option value="">Selecciona</option>
-              ${conceptOptions}
-              <option value="otros">Otros</option>
-            </select>
-          </label>
-          <label class="hidden" data-expense-custom-concept>Tipo
-            <input name="concepto_otro" type="text" data-normalize-case="first-upper">
-          </label>
-          <label>Descripción<textarea name="descripcion" data-normalize-case="first-upper"></textarea></label>
-        </div>
-      </section>
-      <section class="tenant-create-section">
-        <h4>Importe y estado</h4>
-        <div class="tenant-create-grid expense-create-grid-four">
-          <label>Importe<input name="importe" type="number" step="any" required></label>
-          ${renderBillingPeriodPicker()}
-          <label>Estado
-            <select name="estado">
-              <option value="">Selecciona</option>
-              <option value="pendiente">pendiente</option>
-              <option value="pagado">pagado</option>
-              <option value="cancelado">cancelado</option>
-            </select>
-          </label>
-          <label>Pagado por
-            <select name="pagado_por">
-              <option value="">Selecciona</option>
-              ${paidByOptions}
-            </select>
-          </label>
-        </div>
-      </section>
+    <div class="expense-create-main-grid">
+      <label class="expense-create-source-field">Gasto de
+        <select name="gasto_de" required>
+          <option value="">Selecciona</option>
+          <option value="vivienda">Vivienda</option>
+          <option value="inquilino">Inquilino</option>
+          <option value="propietario">Propietario</option>
+        </select>
+      </label>
+      <label class="expense-create-house-field" data-expense-house-field>Vivienda
+        <select name="id_vivienda" required>
+          <option value="">Selecciona vivienda</option>
+          ${houseOptions}
+        </select>
+      </label>
+      <label class="expense-create-tenant-field hidden" data-expense-tenant-field>Inquilino
+        <select name="id_inquilino">
+          <option value="">Selecciona inquilino</option>
+          ${tenantOptions}
+        </select>
+      </label>
+      <label class="expense-create-concept-field">Concepto
+        <select name="concepto" required data-expense-concept-select>
+          <option value="">Selecciona</option>
+          ${conceptOptions}
+          <option value="otros">Otros</option>
+        </select>
+      </label>
+      <label class="expense-create-custom-concept-field hidden" data-expense-custom-concept>Tipo
+        <input name="concepto_otro" type="text" data-normalize-case="first-upper">
+      </label>
+      <label class="expense-create-amount-field">Importe<input name="importe" type="number" step="any" required></label>
+      ${renderBillingPeriodPicker()}
+      <label class="expense-create-status-field">Estado
+        <select name="estado">
+          <option value="">Selecciona</option>
+          <option value="pendiente">pendiente</option>
+          <option value="pagado">pagado</option>
+          <option value="cancelado">cancelado</option>
+        </select>
+      </label>
+      <label class="expense-create-paid-by-field">Pagado por
+        <select name="pagado_por">
+          <option value="">Selecciona</option>
+          ${paidByOptions}
+        </select>
+      </label>
+      <label class="expense-description-field">Descripción
+        <textarea name="descripcion" data-normalize-case="first-upper"></textarea>
+      </label>
     </div>
     <div class="form-actions">
       <button class="button primary" type="submit">Crear</button>
@@ -7129,13 +7140,22 @@ async function loadRows() {
   const resource = state.activeResource;
   tableWrap?.classList.remove('hidden');
   if (resource === resources.ownerExpenses) {
-    const [ownerPayload, tenantPayload] = await Promise.all([
+    const [ownerPayload, tenantPayload, tenantsPayload] = await Promise.all([
       request(`${getResourceEndpoint(resources.ownerExpenses)}?page=1&limit=100`),
       request(`${getResourceEndpoint(resources.expenses)}?page=1&limit=100`),
+      request(`${getResourceEndpoint(resources.tenants)}?page=1&limit=500`).catch(() => null),
     ]);
+    const tenantsById = new Map(getRows(tenantsPayload).map((tenant) => [String(tenant.id_inquilino), tenant]));
     state.rows = [
       ...normalizeOwnerExpenseRows(getRows(ownerPayload)),
-      ...normalizeTenantExpenseRows(getRows(tenantPayload).filter((row) => !isTenantDepositExpense(row))),
+      ...normalizeTenantExpenseRows(getRows(tenantPayload).filter((row) => !isTenantDepositExpense(row))).map((row) => {
+        const tenant = tenantsById.get(String(row.id_inquilino || ''));
+        return tenant ? {
+          ...row,
+          nombre_inquilino: row.nombre_inquilino || tenant.nombre,
+          apellido1_inquilino: row.apellido1_inquilino || tenant.apellido1,
+        } : row;
+      }),
     ].sort((left, right) => getExpenseDateTime(right) - getExpenseDateTime(left));
   } else if (isDepositResource(resource)) {
     const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100`);
@@ -7219,7 +7239,7 @@ function renderTable() {
     const id = getValue(row, resource.idKey);
     const rowActions = getRowActions(resource, row);
     return `<tr${getRowClass(resource, row)}${getRowDataAttributes(resource, row)}>
-      ${columns.map((column) => `<td>${escapeHtml((isPaymentResource(resource) ? formatPaymentListValue(column, getValue(row, column)) : formatDisplayValue(column, getValue(row, column))) ?? '')}</td>`).join('')}
+      ${columns.map((column) => `<td>${escapeHtml(formatTableValue(resource, row, column) ?? '')}</td>`).join('')}
       ${showActions ? `<td><div class="row-actions">
         ${showMutableActions && actionMode !== 'delete' ? `
           <button class="button small ghost" data-action="edit" data-id="${id}" type="button">Editar</button>

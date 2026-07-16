@@ -685,7 +685,6 @@ function renderTenantDocumentActions(tenant) {
     <button class="button ${hasDocument ? 'primary' : 'ghost'}" data-action="preview-tenant-document" data-id="${escapeHtml(id)}" type="button" ${hasDocument ? '' : 'disabled'}>Ver documento</button>
     <button class="button ${hasContract ? 'primary' : 'ghost'}" data-action="preview-contract" data-id="${escapeHtml(id)}" type="button" ${hasContract ? '' : 'disabled'}>Ver contrato</button>
     <button class="button ${hasSignedContract ? 'primary' : 'ghost'}" data-action="preview-signed-contract" data-id="${escapeHtml(id)}" type="button" ${hasSignedContract ? '' : 'disabled'}>Ver firmado</button>
-    <button class="detail-close-button" data-action="close-detail" type="button" aria-label="Cerrar">&times;</button>
   </div>`;
 }
 
