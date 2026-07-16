@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Mijornal Rooms</title>
+    <link rel="icon" type="image/png" href="assets/brand/mijornal-rooms-logo.png">
+    <link rel="stylesheet" href="styles.css?v=20260716-11">
+  </head>
+  <body class="logged-out">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">
+            <img src="assets/brand/mijornal-rooms-logo.png" alt="">
+          </span>
+          <div>
+            <strong>MiJornal Rooms</strong>
+            <small>Gestión de alquileres</small>
+          </div>
+        </div>
+
+        <nav class="nav" id="mainNav" aria-label="Secciones">
+          <button class="nav-link active" data-section="dashboard">Panel</button>
+          <button class="nav-link" data-section="houses" type="button">Viviendas</button>
+          <button class="nav-link" data-section="rooms">Habitaciones</button>
+          <button class="nav-link" data-section="users">Usuarios</button>
+          <button class="nav-link hidden" data-section="tenantUserData">Datos usuario</button>
+          <button class="nav-link" data-section="tenants" type="button">Inquilinos</button>
+          <button class="nav-link hidden" data-section="tenantContracts">Contratos</button>
+          <button class="nav-link" data-section="owners">Propietarios</button>
+          <div class="nav-group" data-nav-group="ownerExpenses">
+            <button class="nav-link" data-section="ownerExpenses" type="button" aria-expanded="false">Gastos propietario</button>
+            <div class="nav-submenu" data-nav-submenu="ownerExpenses">
+              <button class="nav-sublink" data-section="ownerExpenses" data-resource-action="create" type="button">Crear</button>
+            </div>
+          </div>
+          <button class="nav-link" data-section="ownerLiquidations">Contabilidad</button>
+          <button class="nav-link" data-section="expenses">Gastos</button>
+          <button class="nav-link" data-section="payments">Pagos</button>
+          <button class="nav-link" data-section="deposits">Fianzas</button>
+          <div class="nav-group" data-nav-group="statistics">
+            <button class="nav-link" data-section="statistics" type="button" aria-expanded="false">Estadísticas</button>
+            <div class="nav-submenu" data-nav-submenu="statistics">
+              <button class="nav-sublink" data-section="statistics" data-resource-action="bar" type="button">Barra</button>
+              <button class="nav-sublink" data-section="statistics" data-resource-action="line" type="button">Línea</button>
+              <button class="nav-sublink" data-section="statistics" data-resource-action="pie" type="button">Circular</button>
+            </div>
+          </div>
+          <button class="nav-link" data-section="settings">Configuración</button>
+        </nav>
+
+        <nav class="nav hidden" id="adminNav" aria-label="Menú administrador">
+          <button class="nav-link active" data-admin-section="dashboard" type="button">Dashboard</button>
+          <button class="nav-link" data-admin-section="houses" type="button">Viviendas</button>
+          <button class="nav-link" data-admin-section="users" type="button">Usuarios</button>
+          <button class="nav-link" data-admin-section="tenants" type="button">Inquilinos</button>
+          <button class="nav-link" data-admin-section="rooms" type="button">Habitaciones</button>
+          <button class="nav-link" data-admin-section="owners" type="button">Propietarios</button>
+          <button class="nav-link" data-admin-section="payments" type="button">Pagos</button>
+          <button class="nav-link" data-admin-section="deposits" type="button">Fianzas</button>
+          <button class="nav-link" data-admin-section="expenses" type="button">Gastos</button>
+          <button class="nav-link" data-admin-section="liquidations" type="button">Liquidaciones</button>
+          <button class="nav-link danger" data-action="admin-logout" type="button">Cerrar sesión</button>
+        </nav>
+
+        <div class="connection-card">
+          <span class="status-dot" id="apiDot" aria-hidden="true"></span>
+          <div>
+            <strong id="apiStatus">Comprobando api</strong>
+          </div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="sectionEyebrow">Menú propietario</p>
+            <h1 id="sectionTitle">Panel</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="role-badge" id="roleBadge"></span>
+          </div>
+        </header>
+
+        <section class="login-panel" id="loginPanel">
+          <form class="login-form" id="loginForm">
+            <div class="login-brand">
+              <img class="login-logo" src="assets/brand/mijornal-rooms-logo.png" alt="MiJornal Rooms">
+              <div class="login-brand-name">MiJornal Rooms</div>
+            </div>
+            <div>
+              <p class="eyebrow">Acceso</p>
+              <h2>Inicia sesión</h2>
+              <p>Accede con tu correo registrado y tu password.</p>
+            </div>
+            <label>
+              Email
+              <input name="email" type="email" required autocomplete="email">
+            </label>
+            <label>
+              Password
+              <input name="password" type="password" required autocomplete="current-password">
+            </label>
+            <button class="button primary" type="submit">Entrar</button>
+          </form>
+        </section>
+
+        <section class="workspace hidden" id="workspace">
+          <section class="dashboard-grid hidden" id="adminView"></section>
+          <section class="dashboard-grid" id="dashboardView"></section>
+
+          <section class="statistics-view hidden" id="statisticsView">
+            <div class="statistics-header">
+              <p class="eyebrow">Resumen</p>
+              <h2>Estadísticas</h2>
+            </div>
+            <div class="statistics-controls">
+              <label>Vista
+                <select id="statisticsPeriodType">
+                  <option value="monthly">Mensual</option>
+                  <option value="annual">Anual</option>
+                </select>
+              </label>
+              <label>Mes
+                <select id="statisticsMonth"></select>
+              </label>
+              <label>Año
+                <input id="statisticsYear" type="number" min="2000" max="2100" step="1">
+              </label>
+              <label>Comparar mes
+                <select id="statisticsCompareMonth"></select>
+              </label>
+              <label>Comparar año
+                <input id="statisticsCompareYear" type="number" min="2000" max="2100" step="1">
+              </label>
+            </div>
+            <section class="statistics-chart" id="statisticsChart"></section>
+          </section>
+
+          <section class="config-view hidden" id="configView">
+            <form class="resource-form config-form">
+              <h2>Configuración</h2>
+              <section class="tenant-create-section">
+                <h4>Conexión</h4>
+                <div class="tenant-create-grid tenant-create-grid-one">
+                  <label>Dirección de la api<input id="apiBaseInput" type="text" readonly></label>
+                </div>
+              </section>
+              <section class="tenant-create-section">
+                <h4>Importes</h4>
+                <div class="tenant-create-grid tenant-create-grid-two">
+                  <label>Fianza por defecto
+                    <span class="input-with-suffix">
+                      <input id="defaultDepositInput" type="number" min="0" step="0.01">
+                      <span>€</span>
+                    </span>
+                  </label>
+                  <label>Mensualidad mínima
+                    <span class="input-with-suffix">
+                      <input id="minimumMonthlyDaysInput" type="number" min="1" max="31" step="1">
+                      <span>días</span>
+                    </span>
+                  </label>
+                </div>
+              </section>
+              <section class="tenant-create-section">
+                <h4>Sesión</h4>
+                <div class="form-actions">
+                  <button class="button danger" id="logoutButton" type="button">Cerrar sesión</button>
+                </div>
+              </section>
+            </form>
+          </section>
+
+          <section class="crud-view hidden" id="crudView">
+            <div class="toolbar">
+              <div>
+                <p class="eyebrow" id="resourceHint">Recurso</p>
+                <h2 id="resourceTitle">Listado</h2>
+              </div>
+              <div class="toolbar-actions">
+                <div class="accounting-period-filter hidden" id="accountingPeriodFilter">
+                  <span>Período a mostrar</span>
+                  <button class="billing-period-trigger" data-action="toggle-accounting-calendar" type="button" aria-expanded="false" aria-label="Abrir calendario de periodo">
+                    <span data-accounting-period-label>Seleccionar período</span>
+                    <span class="billing-period-icon" aria-hidden="true">▾</span>
+                  </button>
+                  <div data-accounting-calendar-wrap></div>
+                </div>
+                <select class="month-filter hidden" id="monthFilter" aria-label="Filtrar por mes">
+                  <option value="">Todos los meses</option>
+                  <option value="1">Enero</option>
+                  <option value="2">Febrero</option>
+                  <option value="3">Marzo</option>
+                  <option value="4">Abril</option>
+                  <option value="5">Mayo</option>
+                  <option value="6">Junio</option>
+                  <option value="7">Julio</option>
+                  <option value="8">Agosto</option>
+                  <option value="9">Septiembre</option>
+                  <option value="10">Octubre</option>
+                  <option value="11">Noviembre</option>
+                  <option value="12">Diciembre</option>
+                </select>
+                <select class="month-filter hidden" id="tenantSortFilter" aria-label="Filtrar inquilinos">
+                  <option value="">Ordenar por</option>
+                  <option value="fecha_entrada_asc">Fecha entrada ascendente</option>
+                  <option value="fecha_entrada_desc">Fecha entrada descendente</option>
+                  <option value="nombre_asc">Nombre ascendente</option>
+                  <option value="nombre_desc">Nombre descendente</option>
+                  <option value="apellido_asc">Apellido ascendente</option>
+                  <option value="apellido_desc">Apellido descendente</option>
+                  <option value="inactivos">Inactivos</option>
+                </select>
+                <div class="toolbar-document-actions" id="resourceDocumentActions">
+                  <button class="button small ghost" data-action="tenant-resource-action" data-resource-action="create" type="button">Crear</button>
+                  <button class="button small ghost" data-action="tenant-resource-action" data-resource-action="stay" type="button" disabled>Nueva estancia</button>
+                  <button class="button small ghost" data-action="tenant-resource-action" data-resource-action="update" type="button" disabled>Modificar</button>
+                  <button class="button small ghost danger" data-action="tenant-resource-action" data-resource-action="delete" type="button" disabled>Eliminar</button>
+                </div>
+                <div class="expense-filter-row hidden" id="expenseFilterBar">
+                  <select class="month-filter" id="expenseTypeFilter" aria-label="Gasto de">
+                    <option value="">Gasto de</option>
+                    <option value="vivienda">Vivienda</option>
+                    <option value="inquilino">Inquilino</option>
+                    <option value="propietario">Propietario</option>
+                  </select>
+                  <select class="month-filter hidden" id="paymentStatusFilter" aria-label="Estado de pago">
+                    <option value="pendientes">Pendiente</option>
+                    <option value="completados">Pagado</option>
+                    <option value="todos">Todos</option>
+                  </select>
+                  <select class="month-filter" id="expenseHouseFilter" aria-label="Seleccionar vivienda">
+                    <option value="">Seleccionar vivienda</option>
+                  </select>
+                  <label class="expense-date-field">
+                    <span>Desde</span>
+                    <input class="month-filter" id="expenseStartDateFilter" type="date" aria-label="Desde">
+                  </label>
+                  <label class="expense-date-field">
+                    <span>Hasta</span>
+                    <input class="month-filter" id="expenseEndDateFilter" type="date" aria-label="Hasta">
+                  </label>
+                  <button class="button primary" id="expenseApplyFilter" type="button">Aplicar</button>
+                </div>
+                <input id="searchInput" type="search" placeholder="Filtrar tabla">
+                <button class="button primary" id="newButton" type="button">Nuevo</button>
+              </div>
+            </div>
+
+            <div class="split">
+              <form class="resource-form" id="resourceForm"></form>
+              <div class="table-wrap">
+                <table>
+                  <thead id="tableHead"></thead>
+                  <tbody id="tableBody"></tbody>
+                </table>
+                <div class="expense-total hidden" id="expenseTotal"></div>
+              </div>
+              <section class="detail-panel hidden" id="detailPanel"></section>
+            </div>
+          </section>
+        </section>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      </main>
+    </div>
+
+    <script src="js/config/resources.js?v=20260714-09"></script>
+  <script src="js/app.js?v=20260716-17"></script>
+    <script src="js/views/tenantView.js?v=20260716-01"></script>
+  </body>
+</html>
