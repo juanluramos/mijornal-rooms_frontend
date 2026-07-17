@@ -33,14 +33,30 @@ function getMinimumMonthlyDays() {
   return Math.round(getSavedNumber(STORAGE_KEYS.minimumMonthlyDays, DEFAULT_MINIMUM_MONTHLY_DAYS, 1, 31));
 }
 
+function getStoredSessionValue(key) {
+  const value = sessionStorage.getItem(key) || '';
+  localStorage.removeItem(key);
+  return value;
+}
+
+function getStoredSessionUser() {
+  const value = sessionStorage.getItem(STORAGE_KEYS.user) || '{}';
+  localStorage.removeItem(STORAGE_KEYS.user);
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
 const resources = window.resources;
 const resourceMenuActions = window.resourceMenuActions;
 
 const state = {
   apiBase: getSavedApiBase(),
-  token: localStorage.getItem(STORAGE_KEYS.token) || '',
-  refreshToken: localStorage.getItem(STORAGE_KEYS.refreshToken) || '',
-  user: JSON.parse(localStorage.getItem(STORAGE_KEYS.user) || '{}'),
+  token: getStoredSessionValue(STORAGE_KEYS.token),
+  refreshToken: getStoredSessionValue(STORAGE_KEYS.refreshToken),
+  user: getStoredSessionUser(),
   activeSection: 'dashboard',
   activeResource: null,
   rows: [],
@@ -221,9 +237,9 @@ function setSession(data) {
   state.refreshToken = data.refresh_token || '';
   state.user = data.user || {};
   syncUserFromToken();
-  localStorage.setItem(STORAGE_KEYS.token, state.token);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, state.refreshToken);
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(state.user));
+  sessionStorage.setItem(STORAGE_KEYS.token, state.token);
+  sessionStorage.setItem(STORAGE_KEYS.refreshToken, state.refreshToken);
+  sessionStorage.setItem(STORAGE_KEYS.user, JSON.stringify(state.user));
   startIdleSession();
 }
 
@@ -232,6 +248,9 @@ function clearSession() {
   state.token = '';
   state.refreshToken = '';
   state.user = {};
+  sessionStorage.removeItem(STORAGE_KEYS.token);
+  sessionStorage.removeItem(STORAGE_KEYS.refreshToken);
+  sessionStorage.removeItem(STORAGE_KEYS.user);
   localStorage.removeItem(STORAGE_KEYS.token);
   localStorage.removeItem(STORAGE_KEYS.refreshToken);
   localStorage.removeItem(STORAGE_KEYS.user);
@@ -304,7 +323,7 @@ function syncUserFromToken() {
     email: payload.email || state.user.email,
     rol: payload.rol,
   };
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(state.user));
+  sessionStorage.setItem(STORAGE_KEYS.user, JSON.stringify(state.user));
 }
 
 syncUserFromToken();
@@ -706,6 +725,33 @@ function normalizeTenantExpenseRows(rows = []) {
       };
     })(),
   }));
+}
+
+async function enrichTenantExpenseRowsWithNames(rows = [], tenants = []) {
+  const tenantsById = new Map(normalizeTenantRows(tenants).map((tenant) => [String(tenant.id_inquilino), tenant]));
+  const missingIds = Array.from(new Set(rows
+    .filter((row) => String(row.gasto_de_value || row.gasto_de || '').toLowerCase() === 'inquilino')
+    .filter((row) => !(row.nombre_inquilino || row.nombre) || !(row.apellido1_inquilino || row.apellido1))
+    .map((row) => String(row.id_inquilino || ''))
+    .filter((id) => id && !tenantsById.has(id))));
+
+  await Promise.all(missingIds.map(async (id) => {
+    try {
+      const tenant = await request(`${getResourceEndpoint(resources.tenants)}/${encodeURIComponent(id)}`);
+      if (tenant?.id_inquilino) tenantsById.set(String(tenant.id_inquilino), tenant);
+    } catch {
+      // Mantener la fila tal cual si no hay permiso o el inquilino ya no existe.
+    }
+  }));
+
+  return rows.map((row) => {
+    const tenant = tenantsById.get(String(row.id_inquilino || ''));
+    return tenant ? {
+      ...row,
+      nombre_inquilino: row.nombre_inquilino || tenant.nombre,
+      apellido1_inquilino: row.apellido1_inquilino || tenant.apellido1,
+    } : row;
+  });
 }
 
 function parseAppDate(value) {
@@ -4774,7 +4820,7 @@ function formatTableValue(resource, row, column) {
       return [row.nombre_inquilino || row.nombre, row.apellido1_inquilino || row.apellido1]
         .filter(Boolean)
         .join(' ')
-        || (row.id_inquilino ? `Inquilino #${row.id_inquilino}` : row.gasto_de)
+        || row.gasto_de
         || '';
     }
     if (target === 'vivienda') return row.nombre_vivienda || row.gasto_de || '';
@@ -7145,17 +7191,13 @@ async function loadRows() {
       request(`${getResourceEndpoint(resources.expenses)}?page=1&limit=100`),
       request(`${getResourceEndpoint(resources.tenants)}?page=1&limit=500`).catch(() => null),
     ]);
-    const tenantsById = new Map(getRows(tenantsPayload).map((tenant) => [String(tenant.id_inquilino), tenant]));
+    const tenantExpenseRows = await enrichTenantExpenseRowsWithNames(
+      normalizeTenantExpenseRows(getRows(tenantPayload).filter((row) => !isTenantDepositExpense(row))),
+      getRows(tenantsPayload),
+    );
     state.rows = [
       ...normalizeOwnerExpenseRows(getRows(ownerPayload)),
-      ...normalizeTenantExpenseRows(getRows(tenantPayload).filter((row) => !isTenantDepositExpense(row))).map((row) => {
-        const tenant = tenantsById.get(String(row.id_inquilino || ''));
-        return tenant ? {
-          ...row,
-          nombre_inquilino: row.nombre_inquilino || tenant.nombre,
-          apellido1_inquilino: row.apellido1_inquilino || tenant.apellido1,
-        } : row;
-      }),
+      ...tenantExpenseRows,
     ].sort((left, right) => getExpenseDateTime(right) - getExpenseDateTime(left));
   } else if (isDepositResource(resource)) {
     const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100`);
@@ -8738,7 +8780,7 @@ async function uploadTenantAvatar(userId, file) {
 
   if (String(state.user?.id_usuario) === String(userId) && result?.avatar_archivo) {
     state.user.avatar_archivo = result.avatar_archivo;
-    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(state.user));
+    sessionStorage.setItem(STORAGE_KEYS.user, JSON.stringify(state.user));
     renderUserBadge(Boolean(state.token));
   }
 
