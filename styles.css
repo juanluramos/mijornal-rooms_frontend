@@ -1073,7 +1073,7 @@ textarea {
 
 .payment-history-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 0.8fr);
+  grid-template-columns: max-content max-content minmax(0, 0.7fr) max-content;
   gap: 10px;
   align-items: center;
   padding: 9px 10px;
@@ -1091,8 +1091,19 @@ textarea {
 .payment-history-row em {
   overflow: hidden;
   text-align: right;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
+}
+
+.deposit-payment-history-row {
+  border-color: rgba(39, 117, 107, 0.32);
+  background: #eef8f4;
+}
+
+.deposit-payment-history-row em {
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 400;
 }
 
 .split.house-list-layout .table-wrap {
@@ -1777,7 +1788,11 @@ textarea {
 }
 
 .payment-detail-columns {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns:
+    minmax(300px, 1.05fr)
+    minmax(220px, 0.72fr)
+    minmax(310px, 1.1fr)
+    minmax(380px, 1.35fr);
 }
 
 .deposit-detail-grid {
@@ -1790,6 +1805,10 @@ textarea {
 
 .deposit-movements-section {
   grid-column: 1 / -1;
+}
+
+.deposit-compensation-row:hover {
+  background: rgba(39, 117, 107, 0.08);
 }
 
 .payment-detail-inline-fields {

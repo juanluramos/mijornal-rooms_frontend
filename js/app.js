@@ -7968,17 +7968,39 @@ function getPaymentDetailTitle(row = {}) {
   return row.tipo_movimiento || row.concepto || 'Pago';
 }
 
+function isDepositCompensationHistoryItem(item = {}) {
+  const source = [
+    item.method,
+    item.metodo_pago,
+    item.comments,
+    item.comentarios,
+    item.tipo,
+    item.tipo_movimiento,
+  ].filter(Boolean).join(' ');
+
+  return /fianza|compensaci[oó]n/i.test(source);
+}
+
+function getPaymentHistoryMethodLabel(item = {}) {
+  if (isDepositCompensationHistoryItem(item)) return 'Fianza';
+  return item.method || item.metodo_pago || '';
+}
+
+function getPaymentHistoryUserLabel(value = '') {
+  return String(value || '').trim().split(/\s+/)[0] || '-';
+}
+
 function renderPaymentHistoryList(row = {}) {
   const history = row.payment_history || [];
   if (!history.length) return '<p class="empty-detail">No hay pagos aplicados.</p>';
-  const paymentUser = String(state.user?.nombre || '').trim() || '-';
+  const paymentUser = getPaymentHistoryUserLabel(state.user?.nombre);
 
   return `<div class="payment-history-list">
-    ${history.map((item) => `<div class="payment-history-row">
+    ${history.map((item) => `<div class="payment-history-row${isDepositCompensationHistoryItem(item) ? ' deposit-payment-history-row' : ''}">
       <span>${escapeHtml(formatDisplayValue('fecha_pago', item.date) || 'Sin fecha')}</span>
       <strong>${escapeHtml(formatMoney(item.amount))} €</strong>
-      <span>${escapeHtml(item.user || paymentUser)}</span>
-      <em>${escapeHtml(item.method || '')}</em>
+      <span>${escapeHtml(getPaymentHistoryUserLabel(item.user || paymentUser))}</span>
+      <em>${escapeHtml(getPaymentHistoryMethodLabel(item))}</em>
     </div>`).join('')}
   </div>`;
 }
@@ -8131,14 +8153,21 @@ function renderDepositMovements(movements = []) {
       </tr>
     </thead>
     <tbody>
-      ${movements.map((movement) => `<tr>
+      ${movements.map((movement) => {
+        const isCompensation = String(movement.tipo || '').toLowerCase() === 'compensacion';
+        const paymentId = movement.id_pago_inquilino || '';
+        const rowAttrs = isCompensation && paymentId
+          ? ` class="clickable-row deposit-compensation-row" data-action="open-compensated-payment" data-payment-id="${escapeHtml(paymentId)}"`
+          : '';
+        return `<tr${rowAttrs}>
         <td>${escapeHtml(formatDisplayValue('fecha', movement.fecha) || '')}</td>
         <td>${escapeHtml(movement.usuario_movimiento || movement.email_usuario_movimiento || '')}</td>
         <td>${escapeHtml(movement.tipo || '')}</td>
         <td>${escapeHtml(formatMoney(movement.importe || 0))} €</td>
-        <td>${escapeHtml(movement.id_pago_inquilino || '')}</td>
+        <td>${escapeHtml(paymentId)}</td>
         <td>${escapeHtml(movement.comentarios || '')}</td>
-      </tr>`).join('')}
+      </tr>`;
+      }).join('')}
     </tbody>
   </table>`;
 }
@@ -8284,20 +8313,83 @@ async function applyDepositMovement(button) {
   await openDepositDetail(id);
 }
 
-function openPaymentDetail(paymentKey) {
-  const row = state.rows.find((item) => String(item.payment_key || '') === String(paymentKey || ''));
-  openPaymentDetailRow(row);
+async function getDepositCompensationHistoryForPayment(row = {}) {
+  const paymentId = row.id_pago_inquilino || '';
+  if (!paymentId) return [];
+
+  try {
+    const payload = await request(`${getResourceEndpoint(resources.deposits)}?page=1&limit=500`);
+    const deposits = getRows(payload)
+      .filter((deposit) => !row.id_inquilino || String(deposit.id_inquilino || '') === String(row.id_inquilino || ''));
+
+    const detailedDeposits = await Promise.all(deposits.map(async (deposit) => {
+      if (Array.isArray(deposit.movimientos)) return deposit;
+      if (!deposit.id_fianza) return deposit;
+      try {
+        return await request(`/api/tenant-deposit/${deposit.id_fianza}`);
+      } catch {
+        return deposit;
+      }
+    }));
+
+    return detailedDeposits.flatMap((deposit) => (deposit.movimientos || [])
+      .filter((movement) => String(movement.id_pago_inquilino || '') === String(paymentId))
+      .filter((movement) => String(movement.tipo || '').toLowerCase() === 'compensacion')
+      .map((movement) => ({
+        amount: parseMoneyValue(movement.importe),
+        date: movement.fecha || '',
+        method: 'Fianza',
+        user: movement.usuario_movimiento || movement.email_usuario_movimiento || '',
+        comments: movement.comentarios || `Fianza #${deposit.id_fianza || ''}`,
+        depositId: deposit.id_fianza || '',
+      })));
+  } catch {
+    return [];
+  }
 }
 
-function openPaymentDetailRow(row) {
+function mergePaymentHistoryRows(currentHistory = [], depositHistory = []) {
+  const rows = [...currentHistory];
+
+  depositHistory.forEach((depositItem) => {
+    const alreadyExists = rows.some((item) => (
+      isDepositCompensationHistoryItem(item)
+      && Math.abs(parseMoneyValue(item.amount) - parseMoneyValue(depositItem.amount)) < 0.009
+      && dateToInputValue(item.date) === dateToInputValue(depositItem.date)
+    ));
+    if (!alreadyExists) rows.push(depositItem);
+  });
+
+  return rows.sort((left, right) => (
+    getExpenseDateTime({ fecha: left.date || left.fecha })
+    - getExpenseDateTime({ fecha: right.date || right.fecha })
+  ));
+}
+
+async function enrichPaymentRowWithDepositHistory(row = {}) {
+  const depositHistory = await getDepositCompensationHistoryForPayment(row);
+  if (!depositHistory.length) return row;
+  return {
+    ...row,
+    payment_history: mergePaymentHistoryRows(row.payment_history || [], depositHistory),
+  };
+}
+
+async function openPaymentDetail(paymentKey) {
+  const row = state.rows.find((item) => String(item.payment_key || '') === String(paymentKey || ''));
+  await openPaymentDetailRow(row);
+}
+
+async function openPaymentDetailRow(row) {
   if (!row) return;
-  state.activePaymentDetailRow = row;
+  const enrichedRow = await enrichPaymentRowWithDepositHistory(row);
+  state.activePaymentDetailRow = enrichedRow;
   resourceForm.classList.remove('hidden');
   resourceForm.classList.add('expense-create-form');
   tableWrap?.classList.add('hidden');
   splitLayout?.classList.remove('table-full-width');
   splitLayout?.classList.add('tenant-create-layout');
-  renderPaymentDetailForm(row);
+  renderPaymentDetailForm(enrichedRow);
 }
 
 function findTenantReceiptPaymentRow(receipt = {}) {
@@ -8346,7 +8438,21 @@ function findTenantReceiptPaymentRow(receipt = {}) {
 async function openTenantReceiptPaymentDetail(receipt) {
   state.resourceAction = null;
   await loadSection('payments');
-  openPaymentDetailRow(findTenantReceiptPaymentRow(receipt));
+  await openPaymentDetailRow(findTenantReceiptPaymentRow(receipt));
+}
+
+async function openCompensatedPaymentDetail(paymentId) {
+  if (!paymentId) return;
+
+  state.resourceAction = null;
+  await loadSection('payments');
+  const payment = state.rows.find((row) => String(row.id_pago_inquilino || '') === String(paymentId));
+  if (!payment) {
+    showToast(`No se encontró el pago #${paymentId}`, 'error');
+    return;
+  }
+
+  await openPaymentDetailRow(payment);
 }
 
 function updatePaymentAmountMode() {
@@ -9966,6 +10072,13 @@ function bindEvents() {
   });
 
   resourceForm?.addEventListener('click', (event) => {
+    const compensatedPaymentRow = event.target.closest('tr[data-action="open-compensated-payment"]');
+    if (compensatedPaymentRow) {
+      openCompensatedPaymentDetail(compensatedPaymentRow.dataset.paymentId)
+        .catch((error) => showToast(error.message || 'No se pudo abrir el pago compensado', 'error'));
+      return;
+    }
+
     const openDepositPaymentModalButton = event.target.closest('button[data-action="open-deposit-payment-modal"]');
     if (openDepositPaymentModalButton) {
       const root = openDepositPaymentModalButton.closest('.expense-create-form') || resourceForm;
@@ -10241,7 +10354,7 @@ function bindEvents() {
       const depositRow = event.target.closest('tr[data-action="open-deposit-detail"]');
       if (depositRow) openDepositDetail(depositRow.dataset.id).catch((error) => showToast(error.message, 'error'));
       const paymentRow = event.target.closest('tr[data-action="open-payment-detail"]');
-      if (paymentRow) openPaymentDetail(paymentRow.dataset.paymentKey);
+      if (paymentRow) openPaymentDetail(paymentRow.dataset.paymentKey).catch((error) => showToast(error.message, 'error'));
       return;
     }
     if (button.dataset.action === 'view-admin-user') {
