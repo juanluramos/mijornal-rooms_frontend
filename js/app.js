@@ -164,13 +164,22 @@ const state = {
 let healthRetryTimer = null;
 const IDLE_LOGOUT_MS = 30 * 60 * 1000;
 const IDLE_ACTIVITY_THROTTLE_MS = 1000;
+const GLOBAL_LOADING_DELAY_MS = 250;
+const GLOBAL_LOADING_MIN_VISIBLE_MS = 400;
+const TABLE_LOADING_DELAY_MS = 250;
 let idleLogoutTimer = null;
 let lastUserActivityAt = Date.now();
 let lastIdleActivityHandledAt = 0;
+let globalLoadingTimer = null;
+let globalLoadingHideTimer = null;
+let globalLoadingShownAt = 0;
+let tableLoadingTimer = null;
+let tableLoadingToken = 0;
 let tenantAvatarCrop = null;
 let houseAutoSaveTimer = null;
 let houseAutoSaveInFlight = false;
 let houseAutoSavePending = false;
+let activeDialogResolver = null;
 const avatarObjectUrls = new WeakMap();
 
 const ADMIN_MENU_SECTIONS = {
@@ -198,6 +207,8 @@ const roleBadge = $('#roleBadge');
 const sectionEyebrow = $('#sectionEyebrow');
 const loginPanel = $('#loginPanel');
 const workspace = $('#workspace');
+const appLoading = $('#appLoading');
+const appLoadingText = $('#appLoadingText');
 const logoutButton = $('#logoutButton');
 const mainNav = $('#mainNav');
 const adminNav = $('#adminNav');
@@ -218,12 +229,16 @@ const accountingPeriodFilter = $('#accountingPeriodFilter');
 const expenseTypeFilter = $('#expenseTypeFilter');
 const paymentStatusFilter = $('#paymentStatusFilter');
 const expenseHouseFilter = $('#expenseHouseFilter');
-const expenseStartDateFilter = $('#expenseStartDateFilter');
-const expenseEndDateFilter = $('#expenseEndDateFilter');
+const expensePeriodFilter = $('#expensePeriodFilter');
 const expenseApplyFilter = $('#expenseApplyFilter');
 const expenseFilterBar = $('#expenseFilterBar');
 const detailPanel = $('#detailPanel');
 const toast = $('#toast');
+const appDialog = $('#appDialog');
+const appDialogTitle = $('#appDialogTitle');
+const appDialogMessage = $('#appDialogMessage');
+const appDialogCancel = $('#appDialogCancel');
+const appDialogAccept = $('#appDialogAccept');
 const splitLayout = document.querySelector('.split');
 const resourceDocumentActions = $('#resourceDocumentActions');
 const HOUSE_ROOM_TYPES = [
@@ -1464,8 +1479,7 @@ function updateExpenseFilterOptions(rows = state.rows) {
     state.expenseHouseOptions,
     state.expenseHouseFilter
   );
-  if (expenseStartDateFilter) expenseStartDateFilter.value = state.expenseStartDateFilter;
-  if (expenseEndDateFilter) expenseEndDateFilter.value = state.expenseEndDateFilter;
+  updateExpenseCalendar();
   if (paymentStatusFilter) {
     const showPaymentStatusFilter = isPaymentResource(state.activeResource) || isExpenseFilterResource(state.activeResource);
     paymentStatusFilter.classList.toggle('hidden', !showPaymentStatusFilter);
@@ -1505,6 +1519,7 @@ function updateResourceFilters(resource) {
   const showExpenseFilters = isFinancialFilterResource(resource) && !isExpenseCreateMode();
   if (isDepositResource(resource)) state.expenseTypeFilter = '';
   expenseFilterBar?.classList.toggle('hidden', !showExpenseFilters);
+  expensePeriodFilter?.classList.toggle('hidden', !showExpenseFilters);
   if (expenseTypeFilter) {
     expenseTypeFilter.classList.toggle('hidden', isDepositResource(resource));
     expenseTypeFilter.value = showExpenseFilters && !isDepositResource(resource) ? state.expenseTypeFilter : '';
@@ -1523,6 +1538,7 @@ function updateResourceFilters(resource) {
     state.expenseEndDateFilter = '';
     state.paymentStatusFilter = 'pendientes';
   }
+  updateExpensePeriodLabel();
 }
 
 function renderHouseSectionActions() {
@@ -1532,16 +1548,16 @@ function renderHouseSectionActions() {
   const hasActiveHouse = Boolean(state.activeHouseRecordId);
   resourceDocumentActions.classList.remove('hidden');
   resourceDocumentActions.innerHTML = `
-    <label class="inline-filter-label">Mostrar
+    <label class="inline-filter-label house-toolbar-filter">
       <select class="month-filter" data-house-status-filter aria-label="Mostrar viviendas">
         <option value="activas" ${state.houseStatusFilter === 'activas' ? 'selected' : ''}>Activas</option>
         <option value="desactivadas" ${state.houseStatusFilter === 'desactivadas' ? 'selected' : ''}>Desactivadas</option>
         <option value="todas" ${state.houseStatusFilter === 'todas' ? 'selected' : ''}>Todas</option>
       </select>
     </label>
-    <button class="button small ${state.resourceAction === 'create' ? 'primary' : 'ghost'}" data-action="house-resource-action" data-resource-action="create" type="button">Crear</button>
-    <button class="button small ${state.resourceAction === 'update' ? 'primary' : 'ghost'}" data-action="house-resource-action" data-resource-action="update" type="button" ${hasActiveHouse ? '' : 'disabled'}>Modificar</button>
-    <button class="button small ${state.resourceAction === 'delete' ? 'primary danger' : 'ghost danger'}" data-action="house-resource-action" data-resource-action="delete" type="button" ${hasActiveHouse ? '' : 'disabled'}>Eliminar</button>`;
+    <button class="button small house-toolbar-button ${state.resourceAction === 'create' ? 'primary' : 'ghost'}" data-action="house-resource-action" data-resource-action="create" type="button">Crear</button>
+    <button class="button small house-toolbar-button ${state.resourceAction === 'update' ? 'primary' : 'ghost'}" data-action="house-resource-action" data-resource-action="update" type="button" ${hasActiveHouse ? '' : 'disabled'}>Modificar</button>
+    <button class="button small house-toolbar-button ${state.resourceAction === 'delete' ? 'primary danger' : 'ghost danger'}" data-action="house-resource-action" data-resource-action="delete" type="button" ${hasActiveHouse ? '' : 'disabled'}>Eliminar</button>`;
 }
 
 function renderTenantSectionActions() {
@@ -1557,10 +1573,10 @@ function renderOwnerTenantToolbarActions() {
   resourceDocumentActions.dataset.ownerTenantActions = 'true';
   resourceDocumentActions.classList.remove('hidden');
   resourceDocumentActions.innerHTML = `
-    <button class="button small ${state.resourceAction === 'create' ? 'primary' : 'ghost'}" data-action="tenant-resource-action" data-resource-action="create" type="button">Crear</button>
-    <button class="button small ${state.resourceAction === 'stay' ? 'primary' : 'ghost'}" data-action="tenant-resource-action" data-resource-action="stay" type="button" ${hasActiveTenant ? '' : 'disabled'}>Nueva estancia</button>
-    <button class="button small ${state.resourceAction === 'update' ? 'primary' : 'ghost'}" data-action="tenant-resource-action" data-resource-action="update" type="button" ${hasActiveTenant ? '' : 'disabled'}>Modificar</button>
-    <button class="button small ${state.resourceAction === 'delete' ? 'primary danger' : 'ghost danger'}" data-action="tenant-resource-action" data-resource-action="delete" type="button" ${hasActiveTenant ? '' : 'disabled'}>Eliminar</button>`;
+    <button class="button small tenant-toolbar-button ${state.resourceAction === 'create' ? 'primary' : 'ghost'}" data-action="tenant-resource-action" data-resource-action="create" type="button">Crear</button>
+    <button class="button small tenant-toolbar-button ${state.resourceAction === 'stay' ? 'primary' : 'ghost'}" data-action="tenant-resource-action" data-resource-action="stay" type="button" ${hasActiveTenant ? '' : 'disabled'}>Nueva estancia</button>
+    <button class="button small tenant-toolbar-button ${state.resourceAction === 'update' ? 'primary' : 'ghost'}" data-action="tenant-resource-action" data-resource-action="update" type="button" ${hasActiveTenant ? '' : 'disabled'}>Modificar</button>
+    <button class="button small tenant-toolbar-button ${state.resourceAction === 'delete' ? 'primary danger' : 'ghost danger'}" data-action="tenant-resource-action" data-resource-action="delete" type="button" ${hasActiveTenant ? '' : 'disabled'}>Eliminar</button>`;
 }
 
 function clearResourceDocumentActions() {
@@ -1611,15 +1627,15 @@ function renderRoomsSectionActions() {
 
   resourceDocumentActions.classList.remove('hidden');
   resourceDocumentActions.innerHTML = `
-    <label class="inline-filter-label">Vivienda
+    <label class="inline-filter-label room-toolbar-filter">
       <select class="month-filter" data-room-house-selector aria-label="Seleccionar vivienda para habitaciones">
         <option value="">Seleccione vivienda</option>
         ${houseOptions}
       </select>
     </label>
-    <button class="button small ${state.resourceAction === 'create' ? 'primary' : 'ghost'}" data-action="room-resource-action" data-resource-action="create" type="button" ${hasSelectedHouse ? '' : 'disabled'}>Crear</button>
-    <button class="button small ${state.resourceAction === 'update' ? 'primary' : 'ghost'}" data-action="room-resource-action" data-resource-action="update" type="button" ${hasSelectedRoom ? '' : 'disabled'}>Modificar</button>
-    <button class="button small ${state.resourceAction === 'delete' ? 'primary danger' : 'ghost danger'}" data-action="room-resource-action" data-resource-action="delete" type="button" ${hasSelectedRoom ? '' : 'disabled'}>Desactivar</button>`;
+    <button class="button small room-toolbar-button ${state.resourceAction === 'create' ? 'primary' : 'ghost'}" data-action="room-resource-action" data-resource-action="create" type="button" ${hasSelectedHouse ? '' : 'disabled'}>Crear</button>
+    <button class="button small room-toolbar-button ${state.resourceAction === 'update' ? 'primary' : 'ghost'}" data-action="room-resource-action" data-resource-action="update" type="button" ${hasSelectedRoom ? '' : 'disabled'}>Modificar</button>
+    <button class="button small room-toolbar-button ${state.resourceAction === 'delete' ? 'primary danger' : 'ghost danger'}" data-action="room-resource-action" data-resource-action="delete" type="button" ${hasSelectedRoom ? '' : 'disabled'}>Desactivar</button>`;
 }
 
 function updateTenantSortFilterVisibility() {
@@ -1914,7 +1930,7 @@ async function openAdminUserDetail(id) {
 
 async function toggleAdminUserActive(id, active) {
   const action = String(active) === '1' ? 'activar' : 'desactivar';
-  const confirmed = window.confirm(`¿Seguro que quieres ${action} este usuario?`);
+  const confirmed = await showConfirmDialog(`¿Seguro que quieres ${action} este usuario?`);
   if (!confirmed) return;
 
   await request(`/api/user/${id}/active`, {
@@ -2153,7 +2169,7 @@ async function openAdminOwnerDetail(id) {
 
 async function toggleAdminOwnerActive(idUser, active) {
   const action = String(active) === '1' ? 'activar' : 'desactivar';
-  const confirmed = window.confirm(`¿Seguro que quieres ${action} este propietario?`);
+  const confirmed = await showConfirmDialog(`¿Seguro que quieres ${action} este propietario?`);
   if (!confirmed) return;
 
   await request(`/api/user/${idUser}/active`, {
@@ -2530,7 +2546,7 @@ async function openTenantDetail(rowOrEvent) {
 
 async function toggleAdminTenantActive(idUser, active) {
   const action = String(active) === '1' ? 'activar' : 'desactivar';
-  const confirmed = window.confirm(`¿Seguro que quieres ${action} este inquilino?`);
+  const confirmed = await showConfirmDialog(`¿Seguro que quieres ${action} este inquilino?`);
   if (!confirmed) return;
 
   await request(`/api/user/${idUser}/active`, {
@@ -2823,7 +2839,7 @@ async function updateHouseOwnerAssignment(root, ownerHouseId) {
 async function removeHouseOwnerAssignment(root, ownerHouseId) {
   const houseId = root?.dataset.houseId;
   if (!ownerHouseId || !houseId) return;
-  const confirmed = window.confirm('¿Quitar este propietario de la vivienda?');
+  const confirmed = await showConfirmDialog('¿Quitar este propietario de la vivienda?');
   if (!confirmed) return;
 
   await request(`/api/owner-house/${ownerHouseId}`, { method: 'DELETE' });
@@ -3046,7 +3062,7 @@ const openAdminHouseDetail = openHouseDetail;
 
 async function toggleAdminHouseActive(id, active) {
   const action = String(active) === '1' ? 'activar' : 'desactivar';
-  const confirmed = window.confirm(`¿Seguro que quieres ${action} esta vivienda?`);
+  const confirmed = await showConfirmDialog(`¿Seguro que quieres ${action} esta vivienda?`);
   if (!confirmed) return;
 
   await request(`/api/house/${id}`, {
@@ -3080,7 +3096,7 @@ async function openActiveHouseEditForm() {
 
 async function deactivateHouseRecord(id, options = {}) {
   const confirmed = options.skipConfirm
-    || window.confirm('¿Eliminar esta vivienda? Se desactivará y dejará de mostrarse.');
+    || await showConfirmDialog('¿Eliminar esta vivienda? Se desactivará y dejará de mostrarse.');
   if (!confirmed) return false;
 
   await request(`/api/house/${id}`, {
@@ -3491,7 +3507,7 @@ async function openAdminRoomDetail(id) {
 
 async function toggleAdminRoomActive(id, active) {
   const action = String(active) === '1' ? 'activar' : 'desactivar';
-  const confirmed = window.confirm(`¿Seguro que quieres ${action} esta habitación?`);
+  const confirmed = await showConfirmDialog(`¿Seguro que quieres ${action} esta habitación?`);
   if (!confirmed) return;
 
   await request(`/api/room/${id}`, {
@@ -3914,7 +3930,7 @@ async function openAdminPaymentDetail(id) {
 }
 
 async function cancelAdminPayment(id) {
-  const confirmed = window.confirm('¿Seguro que quieres anular este pago? Se conservará en el histórico como cancelado.');
+  const confirmed = await showConfirmDialog('¿Seguro que quieres anular este pago? Se conservará en el histórico como cancelado.');
   if (!confirmed) return;
 
   await request(`/api/tenant-payment/${id}`, {
@@ -4257,7 +4273,7 @@ async function openAdminExpenseDetail(id) {
 }
 
 async function cancelAdminExpense(id) {
-  const confirmed = window.confirm('¿Seguro que quieres anular este gasto? Se conservará en el histórico como cancelado.');
+  const confirmed = await showConfirmDialog('¿Seguro que quieres anular este gasto? Se conservará en el histórico como cancelado.');
   if (!confirmed) return;
 
   await request(`/api/tenant-expense/${id}`, {
@@ -4585,7 +4601,7 @@ async function openAdminLiquidationDetail(id) {
 
 async function toggleAdminLiquidationState(id, currentState) {
   const nextState = currentState === 'cancelada' ? 'activa' : 'cancelada';
-  const confirmed = window.confirm(nextState === 'cancelada' ? '¿Cancelar esta liquidación?' : '¿Reactivar esta liquidación?');
+  const confirmed = await showConfirmDialog(nextState === 'cancelada' ? '¿Cancelar esta liquidación?' : '¿Reactivar esta liquidación?');
   if (!confirmed) return;
 
   await request(`/api/owner-liquidation/${id}`, {
@@ -4651,7 +4667,7 @@ function renderAdminLiquidationGenerationResult(result = {}) {
 async function submitAdminLiquidationGenerationForm() {
   if (!resourceForm.checkValidity()) return;
   const data = Object.fromEntries(new FormData(resourceForm).entries());
-  const confirmed = window.confirm('Si ya existe una liquidación para esa vivienda y periodo, se recalculará. ¿Continuar?');
+  const confirmed = await showConfirmDialog('Si ya existe una liquidación para esa vivienda y periodo, se recalculará. ¿Continuar?');
   if (!confirmed) return;
 
   const result = await request('/api/owner-liquidation/generate', {
@@ -4740,6 +4756,132 @@ function showToast(message, type = 'info') {
   toast.textContent = message;
   toast.className = `toast show ${type === 'error' ? 'error' : ''}`;
   window.setTimeout(() => toast.className = 'toast', 3200);
+}
+
+function closeAppDialog(confirmed = false) {
+  if (!appDialog) return;
+  appDialog.classList.add('hidden');
+  document.removeEventListener('keydown', handleAppDialogKeydown);
+  const resolver = activeDialogResolver;
+  activeDialogResolver = null;
+  if (resolver) resolver(confirmed);
+}
+
+function handleAppDialogKeydown(event) {
+  if (event.key === 'Escape') closeAppDialog(false);
+}
+
+function showConfirmDialog(message, options = {}) {
+  if (!appDialog || !appDialogTitle || !appDialogMessage || !appDialogAccept || !appDialogCancel) {
+    showToast(message, 'error');
+    return Promise.resolve(false);
+  }
+
+  if (activeDialogResolver) closeAppDialog(false);
+
+  const previousFocus = document.activeElement;
+  appDialogTitle.textContent = options.title || 'MiJornal Rooms';
+  appDialogMessage.textContent = message;
+  appDialogAccept.textContent = options.acceptText || 'Aceptar';
+  appDialogCancel.textContent = options.cancelText || 'Cancelar';
+  appDialog.classList.remove('hidden');
+  appDialogAccept.focus();
+  document.addEventListener('keydown', handleAppDialogKeydown);
+
+  return new Promise((resolve) => {
+    activeDialogResolver = (confirmed) => {
+      if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
+      resolve(confirmed);
+    };
+  });
+}
+
+appDialogAccept?.addEventListener('click', () => closeAppDialog(true));
+appDialogCancel?.addEventListener('click', () => closeAppDialog(false));
+appDialog?.querySelector('[data-dialog-action="cancel"]')?.addEventListener('click', () => closeAppDialog(false));
+
+function setGlobalLoading(loading, message = 'Cargando...') {
+  if (!appLoading) return;
+  if (appLoadingText) appLoadingText.textContent = message;
+  window.clearTimeout(globalLoadingHideTimer);
+
+  if (loading) {
+    if (!appLoading.classList.contains('hidden')) return;
+    window.clearTimeout(globalLoadingTimer);
+    globalLoadingTimer = window.setTimeout(() => {
+      globalLoadingShownAt = Date.now();
+      appLoading.classList.remove('hidden');
+    }, GLOBAL_LOADING_DELAY_MS);
+    return;
+  }
+
+  window.clearTimeout(globalLoadingTimer);
+  if (appLoading.classList.contains('hidden')) return;
+
+  const visibleMs = Date.now() - globalLoadingShownAt;
+  const remainingMs = GLOBAL_LOADING_MIN_VISIBLE_MS - visibleMs;
+  if (remainingMs > 0) {
+    globalLoadingHideTimer = window.setTimeout(() => {
+      appLoading.classList.add('hidden');
+      globalLoadingShownAt = 0;
+    }, remainingMs);
+    return;
+  }
+
+  appLoading.classList.add('hidden');
+  globalLoadingShownAt = 0;
+}
+
+function getTableColumnCount(resource = state.activeResource) {
+  if (!resource) return 1;
+  if (resource === resources.ownerLiquidations) return 4;
+  const hasReadOnlyActions = state.rows.some((row) => getRowActions(resource, row).length > 0);
+  const actionMode = state.resourceAction;
+  const usesResourceMenu = Object.keys(resourceMenuActions).some((section) => resources[section] === resource);
+  const showMutableActions = canMutateRows(resource)
+    && !isFinancialFilterResource(resource)
+    && (!usesResourceMenu || ['update', 'delete'].includes(actionMode))
+    && !(resource === resources.houses && actionMode === 'update');
+  const showActions = !isFinancialFilterResource(resource) && (showMutableActions || hasReadOnlyActions);
+  return getResourceColumns(resource).length + (showActions ? 1 : 0);
+}
+
+function renderTableLoading(message = 'Cargando datos...') {
+  const resource = state.activeResource;
+  if (!tableHead || !tableBody || !resource) return;
+  const columns = getResourceColumns(resource);
+  tableHead.innerHTML = `<tr>${columns.map((column) => `<th>${formatColumnTitle(column)}</th>`).join('')}</tr>`;
+  tableBody.innerHTML = `<tr><td class="empty table-loading-cell" colspan="${columns.length || 1}">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    <span>${escapeHtml(message)}</span>
+  </td></tr>`;
+}
+
+function scheduleTableLoading(message = 'Cargando datos...') {
+  const token = tableLoadingToken + 1;
+  tableLoadingToken = token;
+  window.clearTimeout(tableLoadingTimer);
+  tableLoadingTimer = window.setTimeout(() => {
+    if (tableLoadingToken !== token) return;
+    renderTableLoading(message);
+  }, TABLE_LOADING_DELAY_MS);
+  return token;
+}
+
+function clearScheduledTableLoading() {
+  tableLoadingToken += 1;
+  window.clearTimeout(tableLoadingTimer);
+  tableLoadingTimer = null;
+}
+
+function renderTableLoadError(message = 'No se pudieron cargar los datos.') {
+  const colSpan = getTableColumnCount();
+  tableBody.innerHTML = `<tr><td class="empty" colspan="${colSpan}">
+    <div class="table-error-state">
+      <strong>${escapeHtml(message)}</strong>
+      <button class="button small ghost" data-action="retry-section" type="button">Reintentar</button>
+    </div>
+  </td></tr>`;
 }
 
 function normalizeBase(base) {
@@ -5214,6 +5356,45 @@ function updateAccountingPeriod(startValue, endValue) {
   updateAccountingCalendar();
   clearDetailPanel();
   renderTable();
+}
+
+function getExpenseCalendarState() {
+  const start = state.expenseStartDateFilter || todayInputValue();
+  const end = state.expenseEndDateFilter || start;
+  const calendar = expensePeriodFilter?.querySelector('[data-expense-calendar]');
+  const month = calendar?.dataset.month || getMonthInputValue(parseInputDate(start) || new Date());
+  return { start, end, month };
+}
+
+function renderExpenseCalendar(monthValue, startValue, endValue, isOpen = false) {
+  return renderBillingCalendar(monthValue, startValue, endValue, isOpen)
+    .replaceAll('data-billing-calendar', 'data-expense-calendar')
+    .replaceAll('data-action="change-billing-month"', 'data-action="change-expense-month"')
+    .replaceAll('data-action="select-billing-date"', 'data-action="select-expense-date"');
+}
+
+function updateExpensePeriodLabel() {
+  const label = expensePeriodFilter?.querySelector('[data-expense-period-label]');
+  if (!label) return;
+  label.textContent = state.expenseStartDateFilter && state.expenseEndDateFilter
+    ? formatBillingPeriodLabel(state.expenseStartDateFilter, state.expenseEndDateFilter)
+    : 'Seleccionar periodo';
+}
+
+function updateExpenseCalendar(monthValue = '') {
+  const calendarWrap = expensePeriodFilter?.querySelector('[data-expense-calendar-wrap]');
+  if (!calendarWrap) return;
+  const { start, end, month } = getExpenseCalendarState();
+  const currentCalendar = calendarWrap.querySelector('[data-expense-calendar]');
+  const isOpen = currentCalendar ? !currentCalendar.classList.contains('hidden') : false;
+  calendarWrap.innerHTML = renderExpenseCalendar(monthValue || month, start, end, isOpen);
+  updateExpensePeriodLabel();
+}
+
+function updateExpensePeriod(startValue, endValue) {
+  state.expenseStartDateFilter = startValue;
+  state.expenseEndDateFilter = endValue;
+  updateExpenseCalendar();
 }
 
 function getTenantFormInitials(tenant = {}) {
@@ -6285,6 +6466,7 @@ async function loadSection(section = state.activeSection) {
 }
 
 function renderForm(row = {}) {
+  resourceForm.classList.toggle('tenant-edit-form', isTenantFullFormMode() || isTenantStayMode());
   resourceForm.classList.toggle('house-create-form', isHouseCreateMode());
   resourceForm.classList.toggle('expense-create-form', isExpenseCreateMode());
 
@@ -7185,66 +7367,76 @@ async function loadRows() {
 
   const resource = state.activeResource;
   tableWrap?.classList.remove('hidden');
-  if (resource === resources.ownerExpenses) {
-    const [ownerPayload, tenantPayload, tenantsPayload] = await Promise.all([
-      request(`${getResourceEndpoint(resources.ownerExpenses)}?page=1&limit=100`),
-      request(`${getResourceEndpoint(resources.expenses)}?page=1&limit=100`),
-      request(`${getResourceEndpoint(resources.tenants)}?page=1&limit=500`).catch(() => null),
-    ]);
-    const tenantExpenseRows = await enrichTenantExpenseRowsWithNames(
-      normalizeTenantExpenseRows(getRows(tenantPayload).filter((row) => !isTenantDepositExpense(row))),
-      getRows(tenantsPayload),
-    );
-    state.rows = [
-      ...normalizeOwnerExpenseRows(getRows(ownerPayload)),
-      ...tenantExpenseRows,
-    ].sort((left, right) => getExpenseDateTime(right) - getExpenseDateTime(left));
-  } else if (isDepositResource(resource)) {
-    const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100`);
-    state.rows = getRows(payload);
-    state.pendingPaymentOptions = state.rows.slice();
-  } else if (isPaymentResource(resource) && getCurrentRole() !== 'inquilino') {
-    state.rows = await loadPaymentLedgerRows();
-    state.pendingPaymentOptions = state.rows.slice();
-  } else if (resource === resources.ownerLiquidations) {
-    state.rows = await loadAccountingRows();
-    initializeAccountingPeriod(state.rows);
-    updateAccountingCalendar();
-  } else if (resource === resources.rooms) {
-    const [roomsPayload, tenantsPayload, housesPayload] = await Promise.all([
-      request(`${getResourceEndpoint(resource)}?page=1&limit=100`),
-      request(`${getResourceEndpoint(resources.tenants)}?page=1&limit=500`).catch(() => []),
-      request(`${getResourceEndpoint(resources.houses)}?page=1&limit=500&activa=1`).catch(() => []),
-    ]);
-    const tenantRows = normalizeTenantRows(getRows(tenantsPayload));
-    state.adminRoomHouseOptions = getRows(housesPayload);
-    state.rows = addRoomAvailability(getRows(roomsPayload), tenantRows);
-  } else if (resource === resources.houses && !isAdminMenuMode()) {
-    const statusParam = state.houseStatusFilter === 'todas'
-      ? 'todas'
-      : state.houseStatusFilter === 'desactivadas'
-        ? '0'
-        : '1';
-    const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100&activa=${encodeURIComponent(statusParam)}`);
-    state.rows = getRows(payload);
-  } else {
-    const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100`);
-    const rows = getRows(payload);
-    if (resource === resources.tenants) state.tenantAssignmentRows = rows;
-    state.rows = resource === resources.expenses
-      ? normalizeTenantExpenseRows(rows.filter((row) => !isTenantDepositExpense(row)))
-      : resource === resources.tenants
-        ? normalizeTenantRows(rows)
-      : rows;
-  }
-  await loadExpenseHouseOptions(state.rows);
-  updateExpenseFilterOptions(state.rows);
-  if (resource !== resources.ownerLiquidations) {
-    clearDetailPanel();
-  }
-  renderTable();
-  if (resource === resources.rooms) {
-    await openRoomsSectionHouseDetail();
+  scheduleTableLoading(`Cargando ${getResourceTitle(resource).toLowerCase()}...`);
+  try {
+    if (resource === resources.ownerExpenses) {
+      const [ownerPayload, tenantPayload, tenantsPayload] = await Promise.all([
+        request(`${getResourceEndpoint(resources.ownerExpenses)}?page=1&limit=100`),
+        request(`${getResourceEndpoint(resources.expenses)}?page=1&limit=100`),
+        request(`${getResourceEndpoint(resources.tenants)}?page=1&limit=500`).catch(() => null),
+      ]);
+      const tenantExpenseRows = await enrichTenantExpenseRowsWithNames(
+        normalizeTenantExpenseRows(getRows(tenantPayload).filter((row) => !isTenantDepositExpense(row))),
+        getRows(tenantsPayload),
+      );
+      state.rows = [
+        ...normalizeOwnerExpenseRows(getRows(ownerPayload)),
+        ...tenantExpenseRows,
+      ].sort((left, right) => getExpenseDateTime(right) - getExpenseDateTime(left));
+    } else if (isDepositResource(resource)) {
+      const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100`);
+      state.rows = getRows(payload);
+      state.pendingPaymentOptions = state.rows.slice();
+    } else if (isPaymentResource(resource) && getCurrentRole() !== 'inquilino') {
+      state.rows = await loadPaymentLedgerRows();
+      state.pendingPaymentOptions = state.rows.slice();
+    } else if (resource === resources.ownerLiquidations) {
+      state.rows = await loadAccountingRows();
+      initializeAccountingPeriod(state.rows);
+      updateAccountingCalendar();
+    } else if (resource === resources.rooms) {
+      const [roomsPayload, tenantsPayload, housesPayload] = await Promise.all([
+        request(`${getResourceEndpoint(resource)}?page=1&limit=100`),
+        request(`${getResourceEndpoint(resources.tenants)}?page=1&limit=500`).catch(() => []),
+        request(`${getResourceEndpoint(resources.houses)}?page=1&limit=500&activa=1`).catch(() => []),
+      ]);
+      const tenantRows = normalizeTenantRows(getRows(tenantsPayload));
+      state.adminRoomHouseOptions = getRows(housesPayload);
+      state.rows = addRoomAvailability(getRows(roomsPayload), tenantRows);
+    } else if (resource === resources.houses && !isAdminMenuMode()) {
+      const statusParam = state.houseStatusFilter === 'todas'
+        ? 'todas'
+        : state.houseStatusFilter === 'desactivadas'
+          ? '0'
+          : '1';
+      const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100&activa=${encodeURIComponent(statusParam)}`);
+      state.rows = getRows(payload);
+    } else {
+      const payload = await request(`${getResourceEndpoint(resource)}?page=1&limit=100`);
+      const rows = getRows(payload);
+      if (resource === resources.tenants) state.tenantAssignmentRows = rows;
+      state.rows = resource === resources.expenses
+        ? normalizeTenantExpenseRows(rows.filter((row) => !isTenantDepositExpense(row)))
+        : resource === resources.tenants
+          ? normalizeTenantRows(rows)
+        : rows;
+    }
+    await loadExpenseHouseOptions(state.rows);
+    updateExpenseFilterOptions(state.rows);
+    if (resource !== resources.ownerLiquidations) {
+      clearDetailPanel();
+    }
+    clearScheduledTableLoading();
+    renderTable();
+    if (resource === resources.rooms) {
+      await openRoomsSectionHouseDetail();
+    }
+  } catch (error) {
+    clearScheduledTableLoading();
+    state.rows = [];
+    updateExpenseTotal([], resource);
+    renderTableLoadError(error.message || `No se pudieron cargar ${getResourceTitle(resource).toLowerCase()}.`);
+    throw error;
   }
 }
 
@@ -7904,7 +8096,7 @@ async function deleteRow(id) {
     renderHouseSectionActions();
     return;
   }
-  const confirmed = window.confirm(await getDeleteConfirmationText(resource, id));
+  const confirmed = await showConfirmDialog(await getDeleteConfirmationText(resource, id));
   if (!confirmed) return;
   await request(`${resource.endpoint}/${id}`, { method: 'DELETE' });
   showToast('Registro borrado');
@@ -8732,7 +8924,7 @@ async function applyPaymentDetail() {
   const confirmText = isDepositRefund
     ? `¿Registrar devolución fianza por ${formatMoney(-appliedAbs)} €?`
     : `¿Aplicar este pago por ${formatMoney(applied)} €?`;
-  const confirmed = window.confirm(confirmText);
+  const confirmed = await showConfirmDialog(confirmText);
   if (!confirmed) return;
 
   const payload = getPaymentApplyPayload(row, formData);
@@ -8783,7 +8975,7 @@ async function applyPaymentRefund() {
   const confirmText = refundType === 'total'
     ? `¿Registrar devolución total por ${formatMoney(refundAmount)} €? Se creará un pago negativo y el pago positivo quedará completado.`
     : `¿Registrar devolución parcial por ${formatMoney(refundAmount)} €? El pago positivo quedará en ${formatMoney(remainingAmount)} € y se creará un pago negativo.`;
-  const confirmed = window.confirm(confirmText);
+  const confirmed = await showConfirmDialog(confirmText);
   if (!confirmed) return;
 
   const positivePayload = {
@@ -8812,7 +9004,7 @@ async function cancelExpenseRow(id, endpoint) {
     showToast('No tienes permisos para anular este gasto', 'error');
     return;
   }
-  const confirmed = window.confirm(`¿Anular el gasto #${id}? Se conservará en el histórico como cancelado.`);
+  const confirmed = await showConfirmDialog(`¿Anular el gasto #${id}? Se conservará en el histórico como cancelado.`);
   if (!confirmed) return;
   await request(`${endpoint}/${id}`, {
     method: 'PUT',
@@ -9034,7 +9226,7 @@ async function runRoomsSectionAction(action) {
   }
 
   if (action === 'delete') {
-    const confirmed = window.confirm(`¿Desactivar ${selectedRoom.nombre || 'esta habitación'}?`);
+    const confirmed = await showConfirmDialog(`¿Desactivar ${selectedRoom.nombre || 'esta habitación'}?`);
     if (!confirmed) return;
     await request(`${resources.rooms.endpoint}/${selectedRoom.id_habitacion}`, {
       method: 'PUT',
@@ -9452,15 +9644,20 @@ async function login(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = formDataToObject(form);
-  const response = await request('/api/login', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }, false);
-  setSession(response);
-  form.reset();
-  renderAuth();
-  showToast('Sesión iniciada');
-  await loadSection('dashboard');
+  setGlobalLoading(true, 'Iniciando sesión...');
+  try {
+    const response = await request('/api/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, false);
+    setSession(response);
+    form.reset();
+    renderAuth();
+    showToast('Sesión iniciada');
+    await loadSection('dashboard');
+  } finally {
+    setGlobalLoading(false);
+  }
 }
 
 async function logout() {
@@ -10331,6 +10528,10 @@ function bindEvents() {
 
   tableBody?.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-action]');
+    if (button?.dataset.action === 'retry-section') {
+      loadSection().catch((error) => showToast(error.message, 'error'));
+      return;
+    }
     if (!button) {
       const houseEditRow = event.target.closest('tr[data-action="edit-house"]');
       if (houseEditRow) {
@@ -10470,8 +10671,6 @@ function bindEvents() {
     state.expenseTypeFilter = expenseTypeFilter?.value || '';
     state.paymentStatusFilter = paymentStatusFilter?.value || (isPaymentResource(state.activeResource) ? 'pendientes' : '');
     state.expenseHouseFilter = expenseHouseFilter?.value || '';
-    state.expenseStartDateFilter = expenseStartDateFilter?.value || '';
-    state.expenseEndDateFilter = expenseEndDateFilter?.value || '';
     clearDetailPanel();
     renderTable();
   });
@@ -10508,6 +10707,39 @@ function bindEvents() {
         updateAccountingPeriod(start, selectedDate);
         const calendar = accountingPeriodFilter.querySelector('[data-accounting-calendar]');
         const trigger = accountingPeriodFilter.querySelector('[data-action="toggle-accounting-calendar"]');
+        calendar?.classList.add('hidden');
+        trigger?.setAttribute('aria-expanded', 'false');
+      }
+    }
+  });
+  expensePeriodFilter?.addEventListener('click', (event) => {
+    const actionButton = event.target.closest('button[data-action]');
+    if (!actionButton) return;
+
+    if (actionButton.dataset.action === 'toggle-expense-calendar') {
+      const calendar = expensePeriodFilter.querySelector('[data-expense-calendar]');
+      const hidden = calendar?.classList.toggle('hidden');
+      actionButton.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+      return;
+    }
+
+    if (actionButton.dataset.action === 'change-expense-month') {
+      updateExpenseCalendar(actionButton.dataset.month);
+      return;
+    }
+
+    if (actionButton.dataset.action === 'select-expense-date') {
+      const { start, end } = getExpenseCalendarState();
+      const selectedDate = actionButton.dataset.date;
+      const selected = parseInputDate(selectedDate);
+      const currentStart = parseInputDate(start);
+      const currentEnd = parseInputDate(end);
+      if (!currentStart || !currentEnd || start !== end || selected < currentStart) {
+        updateExpensePeriod(selectedDate, selectedDate);
+      } else {
+        updateExpensePeriod(start, selectedDate);
+        const calendar = expensePeriodFilter.querySelector('[data-expense-calendar]');
+        const trigger = expensePeriodFilter.querySelector('[data-action="toggle-expense-calendar"]');
         calendar?.classList.add('hidden');
         trigger?.setAttribute('aria-expanded', 'false');
       }
@@ -10570,9 +10802,10 @@ bindEvents();
 renderAuth();
 checkHealth();
 if (state.token) {
+  setGlobalLoading(true, 'Cargando tu sesión...');
   loadSection('dashboard').catch((error) => {
     showToast(error.message, 'error');
     clearSession();
     renderAuth();
-  });
+  }).finally(() => setGlobalLoading(false));
 }

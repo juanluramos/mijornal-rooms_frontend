@@ -59,8 +59,9 @@ textarea {
 
 .logged-out .sidebar {
   position: fixed;
+  top: 24px;
   right: 24px;
-  bottom: 24px;
+  bottom: auto;
   z-index: 20;
   width: min(260px, calc(100vw - 48px));
   height: auto;
@@ -253,6 +254,44 @@ textarea {
   overflow: hidden;
 }
 
+.app-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(244, 246, 241, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.app-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(39, 117, 107, 0.18);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .topbar,
 .toolbar {
   position: relative;
@@ -311,11 +350,8 @@ h2 {
 .accounting-period-filter {
   display: grid;
   position: relative;
-  gap: 5px;
-  min-width: min(280px, 100%);
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
+  gap: 0;
+  min-width: 260px;
 }
 
 .accounting-period-filter.hidden {
@@ -325,6 +361,35 @@ h2 {
 .accounting-period-filter .billing-calendar {
   left: auto;
   right: 0;
+  z-index: 80;
+}
+
+.accounting-period-filter .billing-period-trigger {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.accounting-period-filter .billing-period-trigger span {
+  display: flex;
+  align-items: center;
+  min-height: 0;
+  height: 40px;
+  padding: 0 10px;
+  line-height: 1.2;
+}
+
+.accounting-period-filter .billing-period-icon {
+  width: 28px;
+  height: 40px;
+  padding: 0;
 }
 
 .api-field {
@@ -629,6 +694,21 @@ textarea {
   font-weight: 800;
 }
 
+.statistics-controls select,
+.statistics-controls input {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
 .statistics-chart {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -895,6 +975,27 @@ textarea {
   justify-content: flex-end;
 }
 
+.house-create-form input,
+.house-create-form select,
+.house-create-form .button,
+.house-edit-form input,
+.house-edit-form select,
+.house-edit-form .button {
+  height: 42px;
+  min-height: 42px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.house-create-form select,
+.house-edit-form select {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-weight: 400;
+}
+
 .expense-create-form .form-actions {
   justify-content: flex-end;
 }
@@ -918,8 +1019,64 @@ textarea {
 #tenantSortFilter {
   order: -1;
   width: auto;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
   min-width: 220px;
   flex: 0 0 auto;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.tenant-toolbar-button {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.house-toolbar-filter,
+.room-toolbar-filter {
+  display: grid;
+  gap: 0;
+  min-width: 260px;
+}
+
+.house-toolbar-filter select,
+.room-toolbar-filter select,
+.house-toolbar-button,
+.room-toolbar-button {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.house-toolbar-filter select,
+.room-toolbar-filter select {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-weight: 400;
+}
+
+.house-toolbar-button,
+.room-toolbar-button {
+  padding: 0 14px;
 }
 
 #expenseApplyFilter {
@@ -931,26 +1088,52 @@ textarea {
   gap: 10px;
   align-items: end;
   flex-wrap: nowrap;
-  overflow-x: auto;
+  overflow: visible;
 }
 
-.expense-date-field {
+.expense-period-filter {
   display: grid;
-  gap: 4px;
-  min-width: 150px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
+  position: relative;
+  gap: 0;
+  min-width: 260px;
 }
 
-.expense-date-field .month-filter {
-  min-width: 100%;
+.expense-period-filter .billing-period-trigger {
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.expense-period-filter .billing-period-trigger span {
+  display: flex;
+  align-items: center;
+  min-height: 0;
+  height: 40px;
+  padding: 0 10px;
+  line-height: 1.2;
+}
+
+.expense-period-filter .billing-period-icon {
+  width: 28px;
+  height: 40px;
+  padding: 0;
+}
+
+.expense-period-filter .billing-calendar {
+  z-index: 80;
 }
 
 .toolbar-actions:has(.expense-filter-row:not(.hidden)) {
   flex-wrap: nowrap;
   max-width: 100%;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 #expenseHouseFilter {
@@ -962,11 +1145,6 @@ textarea {
 }
 
 #paymentStatusFilter {
-  min-width: 150px;
-}
-
-#expenseStartDateFilter,
-#expenseEndDateFilter {
   min-width: 150px;
 }
 
@@ -1442,6 +1620,28 @@ textarea {
   align-items: end;
 }
 
+.tenant-edit-form input,
+.tenant-edit-form select,
+.tenant-edit-form .button {
+  height: 42px;
+  min-height: 42px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.tenant-edit-form select {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-weight: 400;
+}
+
+.tenant-edit-form .input-with-suffix input {
+  height: 40px;
+  min-height: 40px;
+}
+
 .tenant-room-current-grid {
   grid-template-columns: 3fr 1fr 1fr;
 }
@@ -1674,6 +1874,23 @@ textarea {
 
 .room-form-grid > label {
   min-width: 0;
+}
+
+.room-edit-form input,
+.room-edit-form select,
+.room-edit-form .button {
+  height: 42px;
+  min-height: 42px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.room-edit-form select {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-weight: 400;
 }
 
 .room-edit-form .form-actions {
@@ -2463,6 +2680,27 @@ textarea {
   color: var(--muted);
 }
 
+.table-loading-cell {
+  height: 96px;
+}
+
+.table-loading-cell,
+.table-error-state {
+  text-align: center;
+}
+
+.table-loading-cell .loading-spinner {
+  display: inline-block;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+.table-error-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
 table {
   width: 100%;
   min-width: 720px;
@@ -2566,6 +2804,67 @@ tbody tr.cancelled-expense-row .row-actions * {
 
 .toast.error {
   background: var(--danger);
+}
+
+.app-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.app-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 31, 34, 0.42);
+}
+
+.app-dialog-card {
+  position: relative;
+  z-index: 1;
+  width: min(420px, calc(100vw - 48px));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.app-dialog-card header {
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+}
+
+.app-dialog-card h2 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.app-dialog-card p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.app-dialog-actions .button {
+  height: 42px;
+  min-height: 42px;
+  border-radius: 6px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
 }
 
 .hidden {

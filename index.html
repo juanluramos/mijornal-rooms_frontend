@@ -6,11 +6,17 @@
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Mijornal Rooms</title>
+    <title>MiJornal Rooms</title>
     <link rel="icon" type="image/png" href="assets/brand/mijornal-rooms-logo.png">
-    <link rel="stylesheet" href="styles.css?v=20260717-07">
+    <link rel="stylesheet" href="styles.css?v=20260717-21">
   </head>
   <body class="logged-out">
+    <div class="app-loading-overlay hidden" id="appLoading" role="status" aria-live="polite" aria-busy="true">
+      <div class="app-loading-card">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <strong id="appLoadingText">Cargando...</strong>
+      </div>
+    </div>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -184,9 +190,8 @@
               </div>
               <div class="toolbar-actions">
                 <div class="accounting-period-filter hidden" id="accountingPeriodFilter">
-                  <span>Período a mostrar</span>
                   <button class="billing-period-trigger" data-action="toggle-accounting-calendar" type="button" aria-expanded="false" aria-label="Abrir calendario de periodo">
-                    <span data-accounting-period-label>Seleccionar período</span>
+                    <span data-accounting-period-label>Seleccionar periodo</span>
                     <span class="billing-period-icon" aria-hidden="true">▾</span>
                   </button>
                   <div data-accounting-calendar-wrap></div>
@@ -237,14 +242,13 @@
                   <select class="month-filter" id="expenseHouseFilter" aria-label="Seleccionar vivienda">
                     <option value="">Seleccionar vivienda</option>
                   </select>
-                  <label class="expense-date-field">
-                    <span>Desde</span>
-                    <input class="month-filter" id="expenseStartDateFilter" type="date" aria-label="Desde">
-                  </label>
-                  <label class="expense-date-field">
-                    <span>Hasta</span>
-                    <input class="month-filter" id="expenseEndDateFilter" type="date" aria-label="Hasta">
-                  </label>
+                  <div class="expense-period-filter" id="expensePeriodFilter">
+                    <button class="billing-period-trigger" data-action="toggle-expense-calendar" type="button" aria-expanded="false" aria-label="Abrir calendario de periodo">
+                      <span data-expense-period-label>Seleccionar periodo</span>
+                      <span class="billing-period-icon" aria-hidden="true">▾</span>
+                    </button>
+                    <div data-expense-calendar-wrap></div>
+                  </div>
                   <button class="button primary" id="expenseApplyFilter" type="button">Aplicar</button>
                 </div>
                 <input id="searchInput" type="search" placeholder="Filtrar tabla">
@@ -267,11 +271,24 @@
         </section>
 
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        <div class="app-dialog hidden" id="appDialog" role="presentation">
+          <div class="app-dialog-backdrop" data-dialog-action="cancel"></div>
+          <section class="app-dialog-card" role="dialog" aria-modal="true" aria-labelledby="appDialogTitle" aria-describedby="appDialogMessage">
+            <header>
+              <h2 id="appDialogTitle">MiJornal Rooms</h2>
+            </header>
+            <p id="appDialogMessage"></p>
+            <div class="app-dialog-actions">
+              <button class="button ghost" id="appDialogCancel" type="button">Cancelar</button>
+              <button class="button primary" id="appDialogAccept" type="button">Aceptar</button>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
 
     <script src="js/config/resources.js?v=20260716-02"></script>
-  <script src="js/app.js?v=20260717-04"></script>
+  <script src="js/app.js?v=20260717-13"></script>
     <script src="js/views/tenantView.js?v=20260716-02"></script>
   </body>
 </html>
